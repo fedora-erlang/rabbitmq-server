@@ -39,7 +39,7 @@
 
 -define(SSL_TIMEOUT, 5). %% seconds
 
--define(FIRST_TEST_BIND_PORT, 10000).
+-define(FIRST_TEST_BIND_PORT, 32768).
 
 %%----------------------------------------------------------------------------
 
