@@ -37,7 +37,7 @@ define PROJECT_ENV
 	    {default_user_tags, [administrator]},
 	    {default_vhost, <<"/">>},
 	    {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
-	    {loopback_users, [<<"guest">>]},
+	    {loopback_users, []},
 	    {password_hashing_module, rabbit_password_hashing_sha256},
 	    {cluster_nodes, {[], disc}},
 	    {server_properties, []},
