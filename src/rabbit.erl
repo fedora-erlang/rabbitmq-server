@@ -376,6 +376,11 @@ load_all_apps() ->
 
 broker_start(Apps) ->
     start_loaded_apps(Apps),
+    case code:load_file(sd_notify) of
+        {module, sd_notify} -> SDNotify = sd_notify,
+			       SDNotify:sd_notify(0, "READY=1\nSTATUS=Initialized\nMAINPID=" ++ os:getpid() ++ "\n");
+        {error, _} -> ok
+    end,
     ok = rabbit_lager:broker_is_started(),
     ok = log_broker_started(rabbit_plugins:strictly_plugins(rabbit_plugins:active())).
 
