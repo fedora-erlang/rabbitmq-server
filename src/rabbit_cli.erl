@@ -57,7 +57,7 @@ ensure_cli_distribution() ->
         {error, Error} ->
             print_error("Failed to initialize erlang distribution: ~p.",
                         [Error]),
-            rabbit_misc:quit(?EX_TEMPFAIL)
+            rabbit_misc:quit(2)
     end.
 
 %%----------------------------------------------------------------------------
@@ -83,10 +83,10 @@ main(ParseFun, DoFun, UsageMod) ->
     %% thrown errors into normal return values
     case catch DoFun(Command, Node, Args, Opts) of
         ok ->
-            rabbit_misc:quit(?EX_OK);
+            rabbit_misc:quit(0);
         {ok, Result} ->
             rabbit_control_misc:print_cmd_result(Command, Result),
-            rabbit_misc:quit(?EX_OK);
+            rabbit_misc:quit(0);
         {'EXIT', {function_clause, [{?MODULE, action, _}    | _]}} -> %% < R15
             PrintInvalidCommandError(),
             usage(UsageMod);
@@ -96,51 +96,51 @@ main(ParseFun, DoFun, UsageMod) ->
         {error, {missing_dependencies, Missing, Blame}} ->
             print_error("dependent plugins ~p not found; used by ~p.",
                         [Missing, Blame]),
-            rabbit_misc:quit(?EX_CONFIG);
+            rabbit_misc:quit(2);
         {'EXIT', {badarg, _}} ->
             print_error("invalid parameter: ~p", [Args]),
-            usage(UsageMod, ?EX_DATAERR);
+            usage(UsageMod, 2);
         {error, {Problem, Reason}} when is_atom(Problem), is_binary(Reason) ->
             %% We handle this common case specially to avoid ~p since
             %% that has i18n issues
             print_error("~s: ~s", [Problem, Reason]),
-            rabbit_misc:quit(?EX_SOFTWARE);
+            rabbit_misc:quit(2);
         {error, Reason} ->
             print_error("~p", [Reason]),
-            rabbit_misc:quit(?EX_SOFTWARE);
+            rabbit_misc:quit(2);
         {error_string, Reason} ->
             print_error("~s", [Reason]),
-            rabbit_misc:quit(?EX_SOFTWARE);
+            rabbit_misc:quit(2);
         {badrpc, {'EXIT', Reason}} ->
             print_error("~p", [Reason]),
-            rabbit_misc:quit(?EX_SOFTWARE);
+            rabbit_misc:quit(2);
         {badrpc, Reason} ->
             case Reason of
                 timeout ->
                     print_error("operation ~w on node ~w timed out", [Command, Node]),
-                    rabbit_misc:quit(?EX_TEMPFAIL);
+                    rabbit_misc:quit(2);
                 _ ->
                     print_error("unable to connect to node ~w: ~w", [Node, Reason]),
                     print_badrpc_diagnostics([Node]),
                     case Command of
-                        stop -> rabbit_misc:quit(?EX_OK);
-                        _    -> rabbit_misc:quit(?EX_UNAVAILABLE)
+                        stop -> rabbit_misc:quit(0);
+                        _    -> rabbit_misc:quit(2)
                     end
             end;
         {badrpc_multi, Reason, Nodes} ->
             print_error("unable to connect to nodes ~p: ~w", [Nodes, Reason]),
             print_badrpc_diagnostics(Nodes),
-            rabbit_misc:quit(?EX_UNAVAILABLE);
+            rabbit_misc:quit(2);
         function_clause ->
             print_error("operation ~w used with invalid parameter: ~p",
                         [Command, Args]),
             usage(UsageMod);
         {refused, Username, _, _} ->
             print_error("failed to authenticate user \"~s\"", [Username]),
-            rabbit_misc:quit(?EX_NOUSER);
+            rabbit_misc:quit(2);
         Other ->
             print_error("~p", [Other]),
-            rabbit_misc:quit(?EX_SOFTWARE)
+            rabbit_misc:quit(2)
     end.
 
 start_distribution_anon(0, LastError) ->
@@ -187,7 +187,7 @@ generate_cli_node_name() ->
     list_to_atom(NameAsList).
 
 usage(Mod) ->
-    usage(Mod, ?EX_USAGE).
+    usage(Mod, 1).
 
 usage(Mod, ExitCode) ->
     io:format("~s", [Mod:usage()]),
