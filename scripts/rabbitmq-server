@@ -84,6 +84,7 @@ RABBITMQ_DIST_PORT=$RABBITMQ_DIST_PORT \
     -boot "${CLEAN_BOOT_FILE}" \
     -noinput \
     -hidden \
+    ${RABBITMQ_SERVER_ERL_ARGS} \
     -s rabbit_prelaunch \
     ${RABBITMQ_NAME_TYPE} ${RABBITMQ_PRELAUNCH_NODENAME} \
     -extra "${RABBITMQ_NODENAME}"
