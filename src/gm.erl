@@ -757,7 +757,14 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
     catch
         lost_membership ->
             {stop, normal, State}
-    end.
+    end;
+handle_info(Msg, State = #state { self = Self }) ->
+    %% TODO: For #gm_group{} related info messages, it could be worthwhile to
+    %% change_view/2, as this might reflect an alteration in the gm group, meaning
+    %% we now need to update our state. see rabbitmq-server#914.
+    rabbit_log:info("GM member ~p received unexpected message ~p~n"
+                    "When Server state == ~p", [Self, Msg, State]),
+    noreply(State).
 
 terminate(Reason, #state { module = Module, callback_args = Args }) ->
     Module:handle_terminate(Args, Reason).
@@ -1593,7 +1600,9 @@ check_membership(Self, #gm_group{members = M} = Group) ->
             Group;
         false ->
             throw(lost_membership)
-    end.
+    end;
+check_membership(_Self, {error, not_found}) ->
+    throw(lost_membership).
 
 check_membership(GroupName) ->
     case dirty_read_group(GroupName) of
