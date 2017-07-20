@@ -398,6 +398,7 @@
 -define(HIBERNATE_AFTER_MIN, 1000).
 -define(DESIRED_HIBERNATE, 10000).
 -define(BROADCAST_TIMER, 25).
+-define(FORCE_GC_TIMER, 250).
 -define(VERSION_START, 0).
 -define(SETS, ordsets).
 -define(DICT, orddict).
@@ -416,6 +417,7 @@
           broadcast_buffer,
           broadcast_buffer_sz,
           broadcast_timer,
+          force_gc_timer,
           txn_executor,
           shutting_down
         }).
@@ -508,7 +510,8 @@ table_definitions() ->
     [{Name, [?TABLE_MATCH | Attributes]}].
 
 start_link(GroupName, Module, Args, TxnFun) ->
-    gen_server2:start_link(?MODULE, [GroupName, Module, Args, TxnFun], []).
+    gen_server2:start_link(?MODULE, [GroupName, Module, Args, TxnFun],
+                       [{spawn_opt, [{fullsweep_after, 0}]}]).
 
 leave(Server) ->
     gen_server2:cast(Server, leave).
@@ -551,6 +554,7 @@ init([GroupName, Module, Args, TxnFun]) ->
                   broadcast_buffer    = [],
                   broadcast_buffer_sz = 0,
                   broadcast_timer     = undefined,
+                  force_gc_timer      = undefined,
                   txn_executor        = TxnFun,
                   shutting_down       = false }, hibernate,
      {backoff, ?HIBERNATE_AFTER_MIN, ?HIBERNATE_AFTER_MIN, ?DESIRED_HIBERNATE}}.
@@ -707,6 +711,10 @@ handle_cast({validate_members, OldMembers},
 handle_cast(leave, State) ->
     {stop, normal, State}.
 
+
+handle_info(force_gc, State) ->
+    garbage_collect(),
+    noreply(State #state { force_gc_timer = undefined });
 
 handle_info(flush, State) ->
     noreply(
@@ -884,13 +892,23 @@ handle_msg({activity, _NotLeft, _Activity}, State) ->
 
 
 noreply(State) ->
-    {noreply, ensure_broadcast_timer(State), flush_timeout(State)}.
+    {noreply, ensure_timers(State), flush_timeout(State)}.
 
 reply(Reply, State) ->
-    {reply, Reply, ensure_broadcast_timer(State), flush_timeout(State)}.
+    {reply, Reply, ensure_timers(State), flush_timeout(State)}.
+
+ensure_timers(State) ->
+    ensure_force_gc_timer(ensure_broadcast_timer(State)).
 
 flush_timeout(#state{broadcast_buffer = []}) -> hibernate;
 flush_timeout(_)                             -> 0.
+
+ensure_force_gc_timer(State = #state { force_gc_timer = TRef })
+  when is_reference(TRef) ->
+    State;
+ensure_force_gc_timer(State = #state { force_gc_timer = undefined }) ->
+    TRef = erlang:send_after(?FORCE_GC_TIMER, self(), force_gc),
+    State #state { force_gc_timer = TRef }.
 
 ensure_broadcast_timer(State = #state { broadcast_buffer = [],
                                         broadcast_timer  = undefined }) ->
@@ -959,8 +977,7 @@ flush_broadcast_buffer(State = #state { self             = Self,
                       end, Self, MembersState),
     State #state { members_state       = MembersState1,
                    broadcast_buffer    = [],
-                   broadcast_buffer_sz = 0}.
-
+                   broadcast_buffer_sz = 0 }.
 
 %% ---------------------------------------------------------------------------
 %% View construction and inspection
