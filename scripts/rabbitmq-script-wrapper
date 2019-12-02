@@ -37,7 +37,18 @@ elif [ `id -u` = `id -u rabbitmq` -o "$SCRIPT" = "rabbitmq-plugins" ] ; then
     fi
     exec /usr/lib/rabbitmq/bin/${SCRIPT} "$@"
 elif [ `id -u` = 0 ] ; then
-    @SU_RABBITMQ_SH_C@ "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
+    # TODO:
+    # At some point all of the RabbitMQ supported distributions will be using
+    # the util-linux version of /sbin/runuser, as it has been removed from GNU
+    # coreutils as of 2012. At that point the first clause of the following
+    # if statement can become the only statement used and the if/then
+    # removed
+    if /sbin/runuser --version | grep -qF util-linux
+    then
+        exec /sbin/runuser -u rabbitmq -- "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
+    else
+        exec /sbin/runuser -s /bin/sh -- rabbitmq "/usr/lib/rabbitmq/bin/${SCRIPT} ${CMDLINE}"
+    fi
 else
     /usr/lib/rabbitmq/bin/${SCRIPT}
     echo
