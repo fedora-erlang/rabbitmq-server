@@ -158,6 +158,7 @@
 
 -type(auth_user() ::
         #auth_user{username :: username(),
+                   password :: password(),  % only used by token-based authNZ backends such as oauth2
                    tags     :: [atom()],
                    impl     :: any()}).
 
@@ -167,6 +168,7 @@
 
 -type(user() ::
         #user{username       :: username(),
+              password       :: password(),  % only used by token-based authNZ backends such as oauth2
               tags           :: [atom()],
               authz_backends :: [{atom(), any()}]}).
 

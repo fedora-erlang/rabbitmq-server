@@ -9,11 +9,13 @@
 
 %% Passed around most places
 -record(user, {username,
+               password,
                tags,
                authz_backends}). %% List of {Module, AuthUserImpl} pairs
 
 %% Passed to auth backends
 -record(auth_user, {username,
+                    password,
                     tags,
                     impl}).
 
@@ -275,4 +277,3 @@
 
 %% Max value for stream max segment size
 -define(MAX_STREAM_MAX_SEGMENT_SIZE, 3_000_000_000).
-

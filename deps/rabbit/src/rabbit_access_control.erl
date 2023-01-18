@@ -36,7 +36,6 @@ check_user_pass_login(Username, Password) ->
             {'refused', rabbit_types:username(), string(), [any()]}.
 
 check_user_login(Username, AuthProps) ->
-    %% extra auth properties like MQTT client id are in AuthProps
     {ok, Modules} = application:get_env(rabbit, auth_backends),
     try
         lists:foldl(
@@ -68,7 +67,7 @@ check_user_login(Username, AuthProps) ->
             end,
             {refused, Username, "No modules checked '~ts'", [Username]}, Modules)
         catch 
-            Type:Error:Stacktrace -> 
+            Type:Error:Stacktrace ->
                 rabbit_log:debug("User '~ts' authentication failed with ~ts:~tp:~n~tp", [Username, Type, Error, Stacktrace]),
                 {refused, Username, "User '~ts' authentication failed with internal error. "
                                     "Enable debug logs to see the real error.", [Username]}
@@ -112,10 +111,16 @@ try_authorize(Modules, Username, AuthProps) ->
               {refused, Username, F, A}
       end, {ok, [], []}, Modules).
 
-user(#auth_user{username = Username, tags = Tags}, {ok, ModZImpls, ModZTags}) ->
+user(#auth_user{username = Username, password = undefined, tags = Tags}, {ok, ModZImpls, ModZTags}) ->
     {ok, #user{username       = Username,
                tags           = Tags ++ ModZTags,
                authz_backends = ModZImpls}};
+user(#auth_user{username = Username, password = Password, tags = Tags}, {ok, ModZImpls, ModZTags}) ->
+    {ok, #user{username       = Username,
+               password       = Password,
+               tags           = Tags ++ ModZTags,
+               authz_backends = ModZImpls}};
+
 user(_AuthUser, Error) ->
     Error.
 

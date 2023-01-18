@@ -33,13 +33,20 @@ info(Pid) ->
     gen_server2:call(Pid, info, infinity).
 %% ---------
 
-init({Channel, ReaderPid, WriterPid, #user{username = Username}, VHost,
+init({Channel, ReaderPid, WriterPid, #user{username = Username, password = Password}, VHost,
       FrameMax, AdapterInfo, _Collector}) ->
     process_flag(trap_exit, true),
+    rabbit_log:info("session_process init ~s ~s ~p", [Username, Password, VHost]),
     case amqp_connection:start(
-           #amqp_params_direct{username     = Username,
-                               virtual_host = VHost,
-                               adapter_info = AdapterInfo}) of
+          case Password of
+            undefined -> #amqp_params_direct{username     = Username,
+                                             virtual_host = VHost,
+                                             adapter_info = AdapterInfo};
+            _ ->         #amqp_params_direct{username     = Username,
+                                             password     = Password,
+                                             virtual_host = VHost,
+                                             adapter_info = AdapterInfo}
+            end) of
         {ok, Conn}  ->
             case amqp_connection:open_channel(Conn) of
                 {ok, Ch} ->
