@@ -19,10 +19,6 @@ dist_verbose = $(dist_verbose_$(V))
 
 MIX_ARCHIVES ?= $(HOME)/.mix/archives
 
-MIX_TASK_ARCHIVE_DEPS_VERSION = 1.0.0
-MIX_TASK_ARCHIVE_DEPS_SHA512 = 6947124c0848d0584416251fc31335d8c17ecd3dbcf8c4013a9c1f0df7a31d16b790dfc1cb45721624fb77610e31975b6804771fe5268797740002bf54c789b8
-mix_task_archive_deps = $(MIX_ARCHIVES)/mix_task_archive_deps-$(MIX_TASK_ARCHIVE_DEPS_VERSION)
-
 # We take the version of an Erlang application from the .app file. This
 # macro is called like this:
 #
@@ -202,15 +198,10 @@ ifneq ($(DIST_AS_EZS),)
 	$(verbose) rm -rf $(EZ_DIR) $(EZ_DIR).manifest
 endif
 
-$(MIX_DIST_EZS): $(mix_task_archive_deps)
+$(MIX_DIST_EZS):
 	$(verbose) cd $(SRC_DIR) && \
 		$(MIX) do deps.get, deps.compile, compile, archive.build.all \
 		-e -o $(abspath $(DIST_DIR)) --skip "rabbit $(ERLANGMK_DIST_APPS)"
-
-MIX_TASK_ARCHIVE_DEPS_URL = https://github.com/rabbitmq/mix_task_archive_deps/releases/download/$(MIX_TASK_ARCHIVE_DEPS_VERSION)/mix_task_archive_deps-$(MIX_TASK_ARCHIVE_DEPS_VERSION).ez
-
-$(mix_task_archive_deps):
-	$(gen_verbose) mix archive.install --force --sha512 $(MIX_TASK_ARCHIVE_DEPS_SHA512) $(MIX_TASK_ARCHIVE_DEPS_URL)
 
 # We need to recurse because the top-level make instance is evaluated
 # before dependencies are downloaded.
