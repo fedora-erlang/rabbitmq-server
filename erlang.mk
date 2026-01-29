@@ -3462,7 +3462,7 @@ ESCRIPT_SHEBANG ?= /usr/bin/env escript
 ESCRIPT_COMMENT ?= This is an -*- erlang -*- file
 ESCRIPT_EMU_ARGS ?= -escript main $(ESCRIPT_NAME)
 
-ESCRIPT_ZIP ?= 7z a -tzip -mx=9 -mtc=off $(if $(filter-out 0,$(V)),,> /dev/null)
+ESCRIPT_ZIP ?= zip -9 -q -X $(if $(filter-out 0,$(V)),,> /dev/null)
 ESCRIPT_ZIP_FILE ?= $(ERLANG_MK_TMP)/escript.zip
 
 # Core targets.
