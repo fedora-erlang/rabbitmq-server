@@ -1416,12 +1416,20 @@ handle_frame_pre_auth(Transport,
 handle_frame_pre_auth(_Transport,
                       #stream_connection{helper_sup = SupPid,
                                          socket = Sock,
-                                         name = ConnectionName} =
+                                         name = ConnectionName,
+                                         frame_max = ConfiguredFrameMax} =
                           Connection,
-                      #stream_connection_state{blocked = Blocked} = State,
+                      #stream_connection_state{blocked = Blocked,
+                                               data = CoreState0} = State,
                       {tune, FrameMax, Heartbeat}) ->
     rabbit_log_connection:debug("Tuning response ~tp ~tp ",
                                 [FrameMax, Heartbeat]),
+    %% The client must not negotiate a frame_max larger than the
+    %% value advertised by the server, so clamp it to the configured
+    %% ceiling before pushing the negotiated value into the parser.
+    NegotiatedFrameMax = min(FrameMax, ConfiguredFrameMax),
+    CoreState = rabbit_stream_core:set_frame_max(NegotiatedFrameMax,
+                                                 CoreState0),
     Parent = self(),
     %% sending a message to the main process so the heartbeat frame is sent from this main process
     %% otherwise heartbeat frames can interleave with chunk delivery
@@ -1448,10 +1456,10 @@ handle_frame_pre_auth(_Transport,
             ok
     end,
     {Connection#stream_connection{connection_step = tuned,
-                                  frame_max = FrameMax,
+                                  frame_max = NegotiatedFrameMax,
                                   heartbeat = Heartbeat,
                                   heartbeater = Heartbeater},
-     State};
+     State#stream_connection_state{data = CoreState}};
 handle_frame_pre_auth(Transport,
                       #stream_connection{user = User,
                                          socket = S,
