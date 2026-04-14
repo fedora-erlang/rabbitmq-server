@@ -7,23 +7,12 @@
 
 -module(rabbit_mgmt_wm_auth).
 
--export([init/2, to_json/2, content_types_provided/2, is_authorized/2]).
--export([variances/2]).
 -export([authSettings/0]). %% for testing only
 
 -include_lib("rabbitmq_management_agent/include/rabbit_mgmt_records.hrl").
 -include_lib("oauth2_client/include/oauth2_client.hrl").
 
 %%--------------------------------------------------------------------
-
-init(Req, _State) ->
-    {cowboy_rest, rabbit_mgmt_headers:set_common_permission_headers(Req, ?MODULE), #context{}}.
-
-variances(Req, Context) ->
-    {[<<"accept-encoding">>, <<"origin">>], Req, Context}.
-
-content_types_provided(ReqData, Context) ->
-   {rabbit_mgmt_util:responder_map(to_json), ReqData, Context}.
 
 merge_oauth_provider_info(OAuthResourceServer, MgtResourceServer, ManagementProps) ->
   OAuthProviderResult = case proplists:get_value(oauth_provider_id, OAuthResourceServer) of
@@ -142,12 +131,6 @@ filter_empty_properties(ListOfProperties) ->
     end, ListOfProperties).
 
 to_binary(Value) -> rabbit_data_coercion:to_binary(Value).
-
-to_json(ReqData, Context) ->
-   rabbit_mgmt_util:reply(authSettings(), ReqData, Context).
-
-is_authorized(ReqData, Context) ->
-    {true, ReqData, Context}.
 
 is_invalid(List) ->
     lists:any(fun(V) -> case V of
