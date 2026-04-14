@@ -2509,9 +2509,10 @@ handle_method(#'queue.declare'{queue       = QueueNameBin,
 handle_method(#'queue.declare'{queue   = QueueNameBin,
                                nowait  = NoWait,
                                passive = true},
-              ConnPid, _AuthzContext, _CollectorPid, VHostPath, _User) ->
+              ConnPid, AuthzContext, _CollectorPid, VHostPath, User) ->
     StrippedQueueNameBin = strip_cr_lf(QueueNameBin),
     QueueName = rabbit_misc:r(VHostPath, queue, StrippedQueueNameBin),
+    check_configure_permitted(QueueName, User, AuthzContext),
     Fun = fun (Q0) ->
               QStat = maybe_stat(NoWait, Q0),
               {QStat, Q0}
@@ -2617,9 +2618,10 @@ handle_method(#'exchange.declare'{exchange    = XNameBin,
                                             AutoDelete, Internal, Args);
 handle_method(#'exchange.declare'{exchange    = ExchangeNameBin,
                                   passive     = true},
-              _ConnPid, _AuthzContext, _CollectorPid, VHostPath, _User) ->
+              _ConnPid, AuthzContext, _CollectorPid, VHostPath, User) ->
     ExchangeName = rabbit_misc:r(VHostPath, exchange, strip_cr_lf(ExchangeNameBin)),
     check_not_default_exchange(ExchangeName),
+    check_configure_permitted(ExchangeName, User, AuthzContext),
     _ = rabbit_exchange:lookup_or_die(ExchangeName).
 
 handle_deliver(CTag, Ack, Msgs, State) when is_list(Msgs) ->
