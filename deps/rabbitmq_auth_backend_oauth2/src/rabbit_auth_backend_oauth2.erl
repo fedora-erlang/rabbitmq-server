@@ -654,7 +654,16 @@ find_claim_in_token(Claim, Token) ->
 tags_from(DecodedToken) ->
     Scopes    = maps:get(?SCOPE_JWT_FIELD, DecodedToken, []),
     TagScopes = matching_scopes_without_prefix(Scopes, ?TAG_SCOPE_PREFIX),
-    lists:usort(lists:map(fun rabbit_data_coercion:to_atom/1, TagScopes)).
+    lists:usort(lists:filtermap(fun safe_to_atom/1, TagScopes)).
+
+safe_to_atom(Bin) when is_binary(Bin) ->
+    try
+        {true, binary_to_existing_atom(Bin, utf8)}
+    catch
+        error:badarg -> false
+    end;
+safe_to_atom(_) ->
+    false.
 
 matching_scopes_without_prefix(Scopes, PrefixPattern) ->
     PatternLength = byte_size(PrefixPattern),
