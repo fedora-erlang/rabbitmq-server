@@ -46,6 +46,8 @@
 
 -export([hashing_module_for_user/1, expand_topic_permission/2]).
 
+-export([max_user_tags/0, count_user_tags/1]).
+
 -ifdef(TEST).
 -export([extract_user_permission_params/2,
          extract_topic_permission_params/2]).
@@ -67,6 +69,9 @@
 hashing_module_for_user(User) ->
     ModOrUndefined = internal_user:get_hashing_algorithm(User),
     rabbit_password:hashing_mod(ModOrUndefined).
+
+%% Limit the number of tags a user can have.
+-define(MAX_USER_TAGS, 32).
 
 -define(BLANK_PASSWORD_REJECTION_MESSAGE,
         "user '~ts' attempted to log in with a blank password, which is prohibited by the internal authN backend. "
@@ -258,7 +263,7 @@ add_user_sans_validation(Username, Password, ActingUser, Limits, Tags) ->
     HashingMod = rabbit_password:hashing_mod(),
     PasswordHash = hash_password(HashingMod, Password),
     User0 = internal_user:create_user(Username, PasswordHash, HashingMod),
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
     User1 = internal_user:set_tags(User0, ConvertedTags),
     User = case Limits of
                undefined -> User1;
@@ -268,7 +273,7 @@ add_user_sans_validation(Username, Password, ActingUser, Limits, Tags) ->
 
 add_user_sans_validation(Username, PasswordHash, HashingMod, Tags, Limits, ActingUser) ->
     rabbit_log:debug("Asked to create a new user '~ts' with password hash", [Username]),
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
     User0 = internal_user:create_user(Username, PasswordHash, HashingMod),
     User1 = internal_user:set_tags(
               internal_user:set_password_hash(User0, PasswordHash, HashingMod),
@@ -387,7 +392,7 @@ update_user_sans_validation(Tags, Limits) ->
 
                 rabbit_log:debug("Asked to set user tags for user '~ts' to ~tp", [Username, Tags]),
 
-                ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+                ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
                 R = update_user_with_hash(Username,
                                           hash_password(rabbit_password:hashing_mod(),
                                                         Password),
@@ -455,7 +460,7 @@ update_user_with_hash(Username, PasswordHash, HashingAlgorithm, ConvertedTags, L
 -spec set_tags(rabbit_types:username(), [atom()], rabbit_types:username()) -> 'ok'.
 
 set_tags(Username, Tags, ActingUser) ->
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
     rabbit_log:debug("Asked to set user tags for user '~ts' to ~tp", [Username, ConvertedTags]),
     try
         R = rabbit_db_user:update(Username, fun(User) ->
@@ -769,7 +774,7 @@ update_user_password_hash(Username, PasswordHash, Tags, Limits, User, Version) -
     HashingAlgorithm = hashing_algorithm(User, Version),
 
     Hash = rabbit_misc:b64decode_or_throw(PasswordHash),
-    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- Tags],
+    ConvertedTags = [rabbit_data_coercion:to_atom(I) || I <- validate_tag_count(Tags)],
     update_user_with_hash(
       Username, Hash, HashingAlgorithm, ConvertedTags, Limits).
 
@@ -847,9 +852,28 @@ clear_user_limits(Username, LimitType, ActingUser) ->
     notify_limit_clear(Username, ActingUser).
 
 tag_list_from(Tags) when is_list(Tags) ->
-    [to_atom(string:strip(to_list(T))) || T <- Tags];
+    [to_atom(string:strip(to_list(T))) || T <- validate_tag_count(Tags)];
 tag_list_from(Tags) when is_binary(Tags) ->
-    [to_atom(string:strip(T)) || T <- string:tokens(to_list(Tags), ",")].
+    [to_atom(string:strip(T)) ||
+        T <- validate_tag_count(string:tokens(to_list(Tags), ","))].
+
+validate_tag_count(Tags) when is_list(Tags), length(Tags) =< ?MAX_USER_TAGS ->
+    Tags;
+validate_tag_count(_) ->
+    throw({error, {too_many_tags, ?MAX_USER_TAGS}}).
+
+-spec max_user_tags() -> non_neg_integer().
+max_user_tags() ->
+    ?MAX_USER_TAGS.
+
+%% Counts the number of tags in either a list or a CSV binary,
+%% mirroring how `tag_list_from/1` interprets the input.
+-spec count_user_tags(Tags) -> non_neg_integer() when
+      Tags :: [term()] | binary().
+count_user_tags(Tags) when is_list(Tags) ->
+    length(Tags);
+count_user_tags(Tags) when is_binary(Tags) ->
+    length(string:tokens(to_list(Tags), ",")).
 
 flatten_errors(L) ->
     case [{F, A} || I <- lists:flatten([L]), {error, F, A} <- [I]] of
