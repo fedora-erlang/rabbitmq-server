@@ -10,7 +10,8 @@
          decode_and_verify/1,
          get_jwk/2,
          resolve_resource_server_id/1,
-         verify_signing_key/2]).
+         verify_signing_key/2,
+         parse_jwks_response/2]).
 
 -export([client_id/1, sub/1, client_id/2, sub/2]).
 
@@ -36,20 +37,45 @@ update_jwks_signing_keys(#oauth_provider{id = Id, jwks_uri = JwksUrl,
     rabbit_log:debug("OAuth 2 JWT: downloading keys from ~tp (TLS options: ~p)",
         [JwksUrl, SslOptions]),
     case uaa_jwks:get(JwksUrl, SslOptions) of
-        {ok, {_, _, JwksBody}} ->
-            KeyList = maps:get(<<"keys">>,
-                jose:decode(erlang:iolist_to_binary(JwksBody)), []),
-            Keys = maps:from_list(lists:map(fun(Key) ->
-                {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
-            rabbit_log:debug("OAuth 2 JWT: downloaded keys ~tp", [Keys]),
-            case rabbit_oauth2_config:replace_signing_keys(Keys, Id) of
-              {error, _} = Err -> Err;
-              _ -> ok
+        {ok, {StatusLine, _Headers, JwksBody}} ->
+            case parse_jwks_response(StatusLine, JwksBody) of
+                {ok, Keys} ->
+                    rabbit_log:debug("OAuth 2 JWT: downloaded ~p keys", [maps:size(Keys)]),
+                    case rabbit_oauth2_config:replace_signing_keys(Keys, Id) of
+                        {error, _} = Err -> Err;
+                        _ -> ok
+                    end;
+                {error, _} = Err ->
+                    rabbit_log:error("OAuth 2 JWT: failed to download keys from ~tp: ~tp",
+                        [JwksUrl, Err]),
+                    Err
             end;
         {error, _} = Err ->
             rabbit_log:error("OAuth 2 JWT: failed to download keys: ~tp", [Err]),
             Err
     end.
+
+%% Only a 200 response with a non-empty, well-formed key list is passed on to
+%% replace_signing_keys/2; anything else is reported as an error instead. A
+%% malformed body must not throw either, since the refresh caller does not
+%% catch it and would otherwise drop the connection.
+-spec parse_jwks_response({term(), integer(), term()}, iodata()) ->
+    {ok, map()} | {error, term()}.
+parse_jwks_response({_, 200, _}, JwksBody) ->
+    try
+        KeyList = maps:get(<<"keys">>,
+            jose:decode(erlang:iolist_to_binary(JwksBody)), []),
+        Keys = maps:from_list(lists:map(fun(Key) ->
+            {maps:get(<<"kid">>, Key, undefined), {json, Key}} end, KeyList)),
+        case maps:size(Keys) of
+            0 -> {error, empty_jwks_response};
+            _ -> {ok, Keys}
+        end
+    catch
+        error:_ -> {error, invalid_jwks_response}
+    end;
+parse_jwks_response({_, StatusCode, _}, _JwksBody) ->
+    {error, {unexpected_status_code, StatusCode}}.
 
 -spec decode_and_verify(binary()) -> {boolean(), binary(), map()} | {error, term()}.
 decode_and_verify(Token) ->
