@@ -190,7 +190,11 @@ list(PluginsPath, IncludeRequiredDeps) ->
     {UniquePlugins, DuplicateProblems} = remove_duplicate_plugins(AllPlugins),
     Plugins1 = maybe_keep_required_deps(IncludeRequiredDeps, UniquePlugins),
     Plugins2 = remove_plugins(Plugins1),
-    maybe_report_plugin_loading_problems(LoadingProblems ++ DuplicateProblems),
+    case DuplicateProblems of
+        [] -> ok;
+        _  -> ?LOG_WARNING("Duplicate plugins found (harmless): ~tp", [DuplicateProblems])
+    end,
+    maybe_report_plugin_loading_problems(LoadingProblems),
     ensure_dependencies(Plugins2).
 
 %% @doc Read the list of enabled plugins from the supplied term file.
