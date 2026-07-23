@@ -21,7 +21,9 @@ all_tests() ->
     [
      roundtrip,
      array_with_extra_input,
-     unsupported_type
+     unsupported_type,
+     server_mode_symbolic_body_descriptors,
+     server_mode_body_descriptor_prefix_collision
     ].
 
 groups() ->
@@ -85,3 +87,45 @@ unsupported_type(_Config) ->
     Bin = <<UnsupportedType, "hey">>,
     Expected = {primitive_type_unsupported, UnsupportedType, {position, 0}},
     ?assertThrow(Expected, amqp10_binary_parser:parse_many(Bin, [])).
+
+%% A symbolic body descriptor of the exact registered length is classified as
+%% the corresponding standard body section in server_mode.
+server_mode_symbolic_body_descriptors(_Config) ->
+    Data8 = <<0, 16#a3, 16, "amqp:data:binary", 16#a0, 1, "x">>,
+    Seq8 = <<0, 16#a3, 23, "amqp:amqp-sequence:list", 16#45>>,
+    Value8 = <<0, 16#a3, 17, "amqp:amqp-value:*", 16#a1, 1, "x">>,
+    ?assertEqual([{{pos, 0}, {body, 16#75}}],
+                 amqp10_binary_parser:parse_many(Data8, [server_mode])),
+    ?assertEqual([{{pos, 0}, {body, 16#76}}],
+                 amqp10_binary_parser:parse_many(Seq8, [server_mode])),
+    ?assertEqual([{{pos, 0}, {body, 16#77}}],
+                 amqp10_binary_parser:parse_many(Value8, [server_mode])),
+    %% The sym32 forms must be classified identically.
+    Data32 = <<0, 16#b3, 16:32, "amqp:data:binary", 16#a0, 1, "x">>,
+    Seq32 = <<0, 16#b3, 23:32, "amqp:amqp-sequence:list", 16#45>>,
+    Value32 = <<0, 16#b3, 17:32, "amqp:amqp-value:*", 16#a1, 1, "x">>,
+    ?assertEqual([{{pos, 0}, {body, 16#75}}],
+                 amqp10_binary_parser:parse_many(Data32, [server_mode])),
+    ?assertEqual([{{pos, 0}, {body, 16#76}}],
+                 amqp10_binary_parser:parse_many(Seq32, [server_mode])),
+    ?assertEqual([{{pos, 0}, {body, 16#77}}],
+                 amqp10_binary_parser:parse_many(Value32, [server_mode])).
+
+server_mode_body_descriptor_prefix_collision(_Config) ->
+    %% Well-formed but unknown descriptor "amqp:data:binary@" (length 17).
+    Collision8 = <<0, 16#a3, 17, "amqp:data:binary", $@, 16#a0, 3, "abc">>,
+    ?assertEqual(
+       [{described, {symbol, <<"amqp:data:binary@">>}, {binary, <<"abc">>}}],
+       amqp10_binary_parser:parse_many(Collision8, [server_mode])),
+
+    %% The same collision via the sym32 constructor.
+    Collision32 = <<0, 16#b3, 17:32, "amqp:data:binary", $@, 16#a0, 3, "abc">>,
+    ?assertEqual(
+       [{described, {symbol, <<"amqp:data:binary@">>}, {binary, <<"abc">>}}],
+       amqp10_binary_parser:parse_many(Collision32, [server_mode])),
+
+    %% A prefix collision on the amqp-value descriptor.
+    ValueCollision = <<0, 16#a3, 18, "amqp:amqp-value:*!", 16#a1, 1, "x">>,
+    ?assertEqual(
+       [{described, {symbol, <<"amqp:amqp-value:*!">>}, {utf8, <<"x">>}}],
+       amqp10_binary_parser:parse_many(ValueCollision, [server_mode])).
