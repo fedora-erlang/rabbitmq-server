@@ -1438,7 +1438,7 @@ function check_bad_response(req, full_page_404) {
 
         if (error == 'bad_request' || error == 'not_found' || error == 'not_authorised' || error == 'not_authorized') {
             if ((req.status == 401 || req.status == 403) && oauth.enabled) {
-              initiate_logout(oauth, reason);
+              initiate_logout(oauth, fmt_escape_html(reason));
             } else {
               show_popup('warn', fmt_escape_html(reason));
             }
