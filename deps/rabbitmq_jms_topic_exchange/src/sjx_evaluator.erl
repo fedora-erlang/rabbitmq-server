@@ -15,6 +15,10 @@
 
 -module(sjx_evaluator).
 
+%% The same limits as rabbit_re in later RabbitMQ versions.
+-define(MATCH_LIMIT, 50000).
+-define(MAX_PATTERN_LENGTH, 1024).
+
 -export([evaluate/2]).
 %% Evaluation function
 %%
@@ -100,9 +104,13 @@ isLike(undefined, _Patt) -> undefined;
 isLike(L, {regex, MP}) -> patt_match(L, MP);
 isLike(L, {Patt, Esc}) -> patt_match(L, pattern_of(Patt, Esc)).
 
+patt_match(_L, error) -> false;
 patt_match(L, MP) ->
   BS = byte_size(L),
-  case re:run(L, MP, [{capture, first}]) of
+  %% LIKE patterns come from client-supplied selectors, so bound backtracking.
+  case re:run(L, MP, [{capture, first},
+                      {match_limit, ?MATCH_LIMIT},
+                      {match_limit_recursion, ?MATCH_LIMIT}]) of
     {match, [{0, BS}]} -> true;
     _                  -> false
   end.
@@ -163,6 +171,7 @@ escape($\\) -> "\\\\";
 escape(Ch)  -> Ch.
 
 compile_re(error) -> error;
+compile_re(MatchMany) when length(MatchMany) > ?MAX_PATTERN_LENGTH -> error;
 compile_re(MatchMany) ->
     case re:compile(MatchMany)
     of  {ok, Rx} -> Rx;
